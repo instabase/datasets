@@ -16,6 +16,7 @@
 # Lint as: python3
 """ This class handle features definition in datasets and some utilities to display table type."""
 import copy
+import json
 import re
 import sys
 from collections.abc import Iterable
@@ -30,6 +31,7 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.types
+import pyarrow_hotfix  # noqa: F401  # to fix vulnerability on pyarrow<14.0.1
 from pandas.api.extensions import ExtensionArray as PandasExtensionArray
 from pandas.api.extensions import ExtensionDtype as PandasExtensionDtype
 from pyarrow.lib import TimestampType
@@ -353,7 +355,7 @@ class Array5D(_ArrayXD):
     _type: str = field(default="Array5D", init=False, repr=False)
 
 
-class _ArrayXDExtensionType(pa.PyExtensionType):
+class _ArrayXDExtensionType(pa.ExtensionType):
     ndims: Optional[int] = None
 
     def __init__(self, shape: tuple, dtype: str):
@@ -364,13 +366,18 @@ class _ArrayXDExtensionType(pa.PyExtensionType):
         self.shape = tuple(shape)
         self.value_type = dtype
         self.storage_dtype = self._generate_dtype(self.value_type)
-        pa.PyExtensionType.__init__(self, self.storage_dtype)
+        pa.ExtensionType.__init__(self, self.storage_dtype, f"{self.__class__.__module__}.{self.__class__.__name__}")
+
+    def __arrow_ext_serialize__(self):
+        return json.dumps((self.shape, self.value_type)).encode()
+
+    @classmethod
+    def __arrow_ext_deserialize__(cls, storage_type, serialized):
+        args = json.loads(serialized)
+        return cls(*args)
 
     def __reduce__(self):
-        return self.__class__, (
-            self.shape,
-            self.value_type,
-        )
+        return self.__arrow_ext_deserialize__, (self.storage_type, self.__arrow_ext_serialize__())
 
     def __arrow_ext_class__(self):
         return ArrayExtensionArray
@@ -401,6 +408,13 @@ class Array4DExtensionType(_ArrayXDExtensionType):
 
 class Array5DExtensionType(_ArrayXDExtensionType):
     ndims = 5
+
+
+# Register the extension types for deserialization
+pa.register_extension_type(Array2DExtensionType((1, 2), "int64"))
+pa.register_extension_type(Array3DExtensionType((1, 2, 3), "int64"))
+pa.register_extension_type(Array4DExtensionType((1, 2, 3, 4), "int64"))
+pa.register_extension_type(Array5DExtensionType((1, 2, 3, 4, 5), "int64"))
 
 
 def _is_zero_copy_only(pa_type: pa.DataType) -> bool:
