@@ -165,8 +165,9 @@ TESTS_REQUIRE = [
     "texttable>=1.6.3",
     "Werkzeug>=1.0.1",
     "six~=1.15.0",
-    # metadata validation
-    "importlib_resources;python_version<'3.7'",
+    # metadata validation 
+    # commented out since we only use python 3.9
+    # "importlib_resources;python_version<'3.7'",
 ]
 
 if os.name != "nt":
